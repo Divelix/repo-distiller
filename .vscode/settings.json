@@ -1,0 +1,13 @@
+{
+    "files.exclude": {
+        "**/build": true,
+        "**/.pytest_cache": true,
+        "**/*.egg-info": true,
+        "**/.mypy_cache": true,
+        "**/.ruff_cache": true,
+        "**/.venv": true,
+        "**/__pycache__": true
+    },
+    "python.testing.unittestEnabled": false,
+    "python.testing.pytestEnabled": true,
+}
