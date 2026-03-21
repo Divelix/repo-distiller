@@ -1,7 +1,6 @@
 from pathlib import Path
 import yaml
 from pathspec import PathSpec
-from pathspec.patterns.gitwildmatch import GitWildMatchPattern
 
 
 def load_yaml(path: Path | None) -> dict:
@@ -17,4 +16,4 @@ def load_gitignore(repo: Path) -> PathSpec | None:
         return None
 
     patterns = gitignore.read_text(encoding="utf-8").splitlines()
-    return PathSpec.from_lines(GitWildMatchPattern, patterns)
+    return PathSpec.from_lines("gitignore", patterns)

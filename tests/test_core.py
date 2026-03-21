@@ -1,7 +1,6 @@
 from pathlib import Path
 
 from pathspec import PathSpec
-from pathspec.patterns.gitwildmatch import GitWildMatchPattern
 
 from repo_distiller.core import (
     rel,
@@ -52,7 +51,7 @@ class TestIsDefaultExcluded:
 
 class TestIsExcluded:
     def _make_gitignore(self, patterns):
-        return PathSpec.from_lines(GitWildMatchPattern, patterns)
+        return PathSpec.from_lines("gitignore", patterns)
 
     def test_default_excluded(self, tmp_path):
         f = tmp_path / "__pycache__" / "mod.pyc"
