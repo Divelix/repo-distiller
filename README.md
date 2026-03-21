@@ -21,9 +21,12 @@ repo-distiller distill <repo> -o <output> [options]
 | Argument | Description |
 | --- | --- |
 | `repo` | Path to the repository root |
-| `-o`, `--output` | Output file path |
+| `-o`, `--output` | Output file path, or `-` for stdout |
 | `-i`, `--include` | Path to an include config YAML (optional) |
 | `-e`, `--exclude` | Path to an exclude config YAML (optional) |
+| `--no-default-excludes` | Disable built-in exclusion rules |
+| `--dry-run` / `--list` | List files that would be included without writing output |
+| `-v`, `--verbose` | Show progress information on stderr |
 
 ### Basic example
 
@@ -31,7 +34,19 @@ repo-distiller distill <repo> -o <output> [options]
 repo-distiller distill ./my-project -o context.txt
 ```
 
-This writes a directory tree followed by the contents of every file, respecting `.gitignore` and skipping common noise (lock files, `__pycache__`, `.venv`, `node_modules`, etc.).
+This writes a directory tree followed by the contents of every file, respecting `.gitignore` (including nested `.gitignore` files) and skipping common noise (lock files, `__pycache__`, `.venv`, `node_modules`, etc.).
+
+### Write to stdout
+
+```bash
+repo-distiller distill ./my-project -o - | pbcopy
+```
+
+### Preview files without writing
+
+```bash
+repo-distiller distill ./my-project --dry-run
+```
 
 ### Output format
 
@@ -100,7 +115,7 @@ repo-distiller distill ./my-project -o context.txt -i include.yaml -e exclude.ya
 
 ## Default exclusions
 
-The following are always excluded regardless of config:
+The following are excluded by default (disable with `--no-default-excludes`):
 
 - Directories: `.git`, `__pycache__`, `.venv`, `venv`, `node_modules`, `.mypy_cache`, `.pytest_cache`, `.ruff_cache`, `dist`, `build`, `.eggs`
 - Suffixes: `.egg-info`

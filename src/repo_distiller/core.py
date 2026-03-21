@@ -1,5 +1,7 @@
+import os
 from pathlib import Path
-from pathspec import PathSpec
+
+from .config import ExcludeConfig, GitIgnoreStack, IncludeConfig
 
 DEFAULT_EXCLUDE_DIRS = {
     ".git",
@@ -91,8 +93,8 @@ def is_default_excluded(path: Path) -> bool:
 def is_excluded(
     path: Path,
     root: Path,
-    exclude_cfg: dict,
-    gitignore: PathSpec | None,
+    exclude_cfg: ExcludeConfig,
+    gitignore: GitIgnoreStack | None,
 ) -> bool:
     """Check whether a path should be excluded from output.
 
@@ -102,31 +104,31 @@ def is_excluded(
     Args:
         path: Absolute path to the file or directory.
         root: Repository root directory.
-        exclude_cfg: Parsed exclude YAML config with optional "paths"
-            and "extensions" keys.
-        gitignore: Compiled gitignore PathSpec, or None.
+        exclude_cfg: Exclude configuration.
+        gitignore: GitIgnoreStack with accumulated .gitignore patterns,
+            or None.
 
     Returns:
         True if the path should be excluded.
     """
     r = rel(path, root)
 
-    if is_default_excluded(r):
+    if exclude_cfg.use_default_excludes and is_default_excluded(r):
         return True
 
-    if gitignore and gitignore.match_file(str(r)):
+    if gitignore and gitignore.match_file(path):
         return True
 
-    if matches_any_prefix(r, exclude_cfg.get("paths", [])):
+    if matches_any_prefix(r, exclude_cfg.paths):
         return True
 
-    if r.suffix in exclude_cfg.get("extensions", []):
+    if r.suffix in exclude_cfg.extensions:
         return True
 
     return False
 
 
-def is_included(path: Path, root: Path, include_cfg: dict) -> bool:
+def is_included(path: Path, root: Path, include_cfg: IncludeConfig) -> bool:
     """Check whether a path matches the include configuration.
 
     If no include paths are configured, all paths are included.
@@ -134,24 +136,23 @@ def is_included(path: Path, root: Path, include_cfg: dict) -> bool:
     Args:
         path: Absolute path to check.
         root: Repository root directory.
-        include_cfg: Parsed include YAML config with an optional "paths" key.
+        include_cfg: Include configuration.
 
     Returns:
         True if the path is included (or no include filter is set).
     """
-    include_paths = include_cfg.get("paths", [])
-    if not include_paths:
+    if not include_cfg.paths:
         return True
 
-    return matches_any_prefix(rel(path, root), include_paths)
+    return matches_any_prefix(rel(path, root), include_cfg.paths)
 
 
 def file_allowed(
     path: Path,
     root: Path,
-    include_cfg: dict,
-    exclude_cfg: dict,
-    gitignore: PathSpec | None,
+    include_cfg: IncludeConfig,
+    exclude_cfg: ExcludeConfig,
+    gitignore: GitIgnoreStack | None,
 ) -> bool:
     """Determine whether a file should be included in the distilled output.
 
@@ -161,10 +162,9 @@ def file_allowed(
     Args:
         path: Absolute path to the candidate file.
         root: Repository root directory.
-        include_cfg: Parsed include YAML config with optional "paths",
-            "extensions", and "limits" keys.
-        exclude_cfg: Parsed exclude YAML config.
-        gitignore: Compiled gitignore PathSpec, or None.
+        include_cfg: Include configuration.
+        exclude_cfg: Exclude configuration.
+        gitignore: GitIgnoreStack with accumulated patterns, or None.
 
     Returns:
         True if the file passes all filters and should be collected.
@@ -178,51 +178,93 @@ def file_allowed(
     if not is_included(path, root, include_cfg):
         return False
 
-    allowed_exts = include_cfg.get("extensions")
-    if allowed_exts and path.suffix not in allowed_exts:
+    if include_cfg.extensions and path.suffix not in include_cfg.extensions:
         return False
 
-    max_kb = include_cfg.get("limits", {}).get("max_file_size_kb", 512)
-    return path.stat().st_size <= max_kb * 1024
+    return path.stat().st_size <= include_cfg.max_file_size_kb * 1024
+
+
+def _is_dir_excluded(
+    dir_path: Path,
+    root: Path,
+    exclude_cfg: ExcludeConfig,
+    gitignore: GitIgnoreStack | None,
+) -> bool:
+    """Check whether a directory should be pruned during traversal.
+
+    Args:
+        dir_path: Absolute path to the directory.
+        root: Repository root directory.
+        exclude_cfg: Exclude configuration.
+        gitignore: GitIgnoreStack with accumulated patterns, or None.
+
+    Returns:
+        True if the directory (and its contents) should be skipped entirely.
+    """
+    return is_excluded(dir_path, root, exclude_cfg, gitignore)
 
 
 def collect_files(
     root: Path,
-    include_cfg: dict,
-    exclude_cfg: dict,
-    gitignore: PathSpec | None,
+    include_cfg: IncludeConfig,
+    exclude_cfg: ExcludeConfig,
+    gitignore: GitIgnoreStack | None,
 ) -> list[Path]:
     """Collect all allowed files from the repository, sorted by path.
 
-    Recursively walks the repository and returns files that pass all
-    include/exclude filters.
+    Uses os.walk with directory pruning to avoid descending into excluded
+    directories (e.g. .git, node_modules), improving performance on large
+    repositories. Discovers nested .gitignore files during traversal.
 
     Args:
         root: Repository root directory.
-        include_cfg: Parsed include YAML configuration.
-        exclude_cfg: Parsed exclude YAML configuration.
-        gitignore: Compiled gitignore PathSpec, or None.
+        include_cfg: Include configuration.
+        exclude_cfg: Exclude configuration.
+        gitignore: GitIgnoreStack with root patterns, or None.
 
     Returns:
         A sorted list of absolute Paths to the allowed files.
     """
-    return sorted(
-        p
-        for p in root.rglob("*")
-        if file_allowed(p, root, include_cfg, exclude_cfg, gitignore)
-    )
+    result: list[Path] = []
+
+    for dirpath, dirnames, filenames in os.walk(root):
+        dir_as_path = Path(dirpath)
+
+        # Load nested .gitignore patterns for this directory.
+        if gitignore and dir_as_path != root:
+            gitignore.push_dir(dir_as_path)
+
+        # Prune excluded directories in-place to prevent os.walk from
+        # descending into them.
+        dirnames[:] = [
+            d for d in dirnames
+            if not _is_dir_excluded(dir_as_path / d, root, exclude_cfg, gitignore)
+        ]
+
+        for fname in filenames:
+            fpath = dir_as_path / fname
+            if file_allowed(fpath, root, include_cfg, exclude_cfg, gitignore):
+                result.append(fpath)
+
+    result.sort()
+    return result
 
 
-def build_tree(root: Path, exclude_cfg: dict, gitignore: PathSpec | None) -> list[str]:
+def build_tree(
+    root: Path,
+    exclude_cfg: ExcludeConfig,
+    gitignore: GitIgnoreStack | None,
+) -> list[str]:
     """Build an ASCII directory tree representation of the repository.
 
     Produces a list of lines resembling the ``tree`` command output,
-    excluding paths matched by the exclusion rules.
+    excluding paths matched by the exclusion rules. Discovers nested
+    .gitignore files during traversal.
 
     Args:
         root: Repository root directory.
-        exclude_cfg: Parsed exclude YAML configuration.
-        gitignore: Compiled gitignore PathSpec, or None.
+        exclude_cfg: Exclude configuration.
+        gitignore: GitIgnoreStack with root patterns, or None.
 
     Returns:
         A list of strings representing the tree, one line per entry.
@@ -230,6 +272,10 @@ def build_tree(root: Path, exclude_cfg: dict, gitignore: PathSpec | None) -> lis
     lines = []
 
     def walk(dir_path: Path, prefix=""):
+        # Load nested .gitignore patterns for this directory.
+        if gitignore and dir_path != root:
+            gitignore.push_dir(dir_path)
+
         entries = sorted(
             [
                 p
