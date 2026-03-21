@@ -1,6 +1,46 @@
 from pathlib import Path
 from pathspec import PathSpec
 
+DEFAULT_EXCLUDE_DIRS = {
+    ".git",
+    "__pycache__",
+    ".venv",
+    "venv",
+    "node_modules",
+    ".mypy_cache",
+    ".pytest_cache",
+    ".ruff_cache",
+    "dist",
+    "build",
+    ".eggs",
+}
+
+DEFAULT_EXCLUDE_SUFFIXES = {".egg-info"}
+
+DEFAULT_EXCLUDE_FILES = {
+    # lock files
+    "package-lock.json",
+    "yarn.lock",
+    "pnpm-lock.yaml",
+    "poetry.lock",
+    "Pipfile.lock",
+    "uv.lock",
+    "Gemfile.lock",
+    "Cargo.lock",
+    "composer.lock",
+    # git metadata
+    ".gitignore",
+    ".gitattributes",
+    ".gitmodules",
+    # licence
+    "LICENSE",
+    "LICENCE",
+    "LICENSE.md",
+    "LICENCE.md",
+    "LICENSE.txt",
+    "LICENCE.txt",
+}
+
 
 def rel(path: Path, root: Path) -> Path:
     return path.relative_to(root)
@@ -10,6 +50,15 @@ def matches_any_prefix(path: Path, prefixes: list[str]) -> bool:
     return any(str(path).startswith(p) for p in prefixes)
 
 
+def is_default_excluded(path: Path) -> bool:
+    if path.name in DEFAULT_EXCLUDE_FILES:
+        return True
+    return any(
+        part in DEFAULT_EXCLUDE_DIRS or any(part.endswith(suf) for suf in DEFAULT_EXCLUDE_SUFFIXES)
+        for part in path.parts
+    )
+
+
 def is_excluded(
     path: Path,
     root: Path,
@@ -17,6 +66,9 @@ def is_excluded(
     gitignore: PathSpec | None,
 ) -> bool:
     r = rel(path, root)
+
+    if is_default_excluded(r):
+        return True
 
     if gitignore and gitignore.match_file(str(r)):
         return True
