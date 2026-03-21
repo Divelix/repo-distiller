@@ -43,14 +43,43 @@ DEFAULT_EXCLUDE_FILES = {
 
 
 def rel(path: Path, root: Path) -> Path:
+    """Compute the relative path from root to path.
+
+    Args:
+        path: The absolute path to relativize.
+        root: The root directory to compute the relative path from.
+
+    Returns:
+        The portion of path that is relative to root.
+    """
     return path.relative_to(root)
 
 
 def matches_any_prefix(path: Path, prefixes: list[str]) -> bool:
+    """Check whether a path starts with any of the given string prefixes.
+
+    Args:
+        path: The path to check.
+        prefixes: A list of string prefixes to match against.
+
+    Returns:
+        True if the string representation of path starts with any prefix.
+    """
     return any(str(path).startswith(p) for p in prefixes)
 
 
 def is_default_excluded(path: Path) -> bool:
+    """Determine whether a relative path matches any built-in exclusion rule.
+
+    Checks the path against DEFAULT_EXCLUDE_FILES, DEFAULT_EXCLUDE_DIRS,
+    and DEFAULT_EXCLUDE_SUFFIXES.
+
+    Args:
+        path: A relative path (from the repo root) to check.
+
+    Returns:
+        True if the path should be excluded by default rules.
+    """
     if path.name in DEFAULT_EXCLUDE_FILES:
         return True
     return any(
@@ -65,6 +94,21 @@ def is_excluded(
     exclude_cfg: dict,
     gitignore: PathSpec | None,
 ) -> bool:
+    """Check whether a path should be excluded from output.
+
+    Applies default exclusions, gitignore patterns, and user-provided
+    exclude configuration (paths and extensions).
+
+    Args:
+        path: Absolute path to the file or directory.
+        root: Repository root directory.
+        exclude_cfg: Parsed exclude YAML config with optional "paths"
+            and "extensions" keys.
+        gitignore: Compiled gitignore PathSpec, or None.
+
+    Returns:
+        True if the path should be excluded.
+    """
     r = rel(path, root)
 
     if is_default_excluded(r):
@@ -83,6 +127,18 @@ def is_excluded(
 
 
 def is_included(path: Path, root: Path, include_cfg: dict) -> bool:
+    """Check whether a path matches the include configuration.
+
+    If no include paths are configured, all paths are included.
+
+    Args:
+        path: Absolute path to check.
+        root: Repository root directory.
+        include_cfg: Parsed include YAML config with an optional "paths" key.
+
+    Returns:
+        True if the path is included (or no include filter is set).
+    """
     include_paths = include_cfg.get("paths", [])
     if not include_paths:
         return True
@@ -97,6 +153,22 @@ def file_allowed(
     exclude_cfg: dict,
     gitignore: PathSpec | None,
 ) -> bool:
+    """Determine whether a file should be included in the distilled output.
+
+    Applies exclusion rules, inclusion filters, extension filters, and
+    file size limits.
+
+    Args:
+        path: Absolute path to the candidate file.
+        root: Repository root directory.
+        include_cfg: Parsed include YAML config with optional "paths",
+            "extensions", and "limits" keys.
+        exclude_cfg: Parsed exclude YAML config.
+        gitignore: Compiled gitignore PathSpec, or None.
+
+    Returns:
+        True if the file passes all filters and should be collected.
+    """
     if not path.is_file():
         return False
 
@@ -120,6 +192,20 @@ def collect_files(
     exclude_cfg: dict,
     gitignore: PathSpec | None,
 ) -> list[Path]:
+    """Collect all allowed files from the repository, sorted by path.
+
+    Recursively walks the repository and returns files that pass all
+    include/exclude filters.
+
+    Args:
+        root: Repository root directory.
+        include_cfg: Parsed include YAML configuration.
+        exclude_cfg: Parsed exclude YAML configuration.
+        gitignore: Compiled gitignore PathSpec, or None.
+
+    Returns:
+        A sorted list of absolute Paths to the allowed files.
+    """
     return sorted(
         p
         for p in root.rglob("*")
@@ -128,6 +214,19 @@ def collect_files(
 
 
 def build_tree(root: Path, exclude_cfg: dict, gitignore: PathSpec | None) -> list[str]:
+    """Build an ASCII directory tree representation of the repository.
+
+    Produces a list of lines resembling the ``tree`` command output,
+    excluding paths matched by the exclusion rules.
+
+    Args:
+        root: Repository root directory.
+        exclude_cfg: Parsed exclude YAML configuration.
+        gitignore: Compiled gitignore PathSpec, or None.
+
+    Returns:
+        A list of strings representing the tree, one line per entry.
+    """
     lines = []
 
     def walk(dir_path: Path, prefix=""):

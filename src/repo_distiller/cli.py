@@ -14,8 +14,17 @@ def distill(
     include: Path | None = typer.Option(None, "-i", "--include"),
     exclude: Path | None = typer.Option(None, "-e", "--exclude"),
 ):
-    """
-    Convert a repository into a single text file.
+    """Convert a repository into a single text file for LLM prompting.
+
+    Builds an ASCII directory tree and concatenates file contents, respecting
+    include/exclude configuration and .gitignore patterns.
+
+    Args:
+        repo: Path to the repository root directory.
+        output: Path to the output text file.
+        include: Optional path to a YAML file specifying include filters.
+        exclude: Optional path to a YAML file specifying exclude filters.
+            When provided, .gitignore patterns are not loaded.
     """
     repo = repo.resolve()
     output = output.resolve()
