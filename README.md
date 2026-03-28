@@ -10,10 +10,16 @@ When working with an LLM on a codebase, you often need to share the full context
 pip install repo-distiller
 ```
 
+Or via uv:
+
+```bash
+uvx repo-distiller
+```
+
 ## Usage
 
 ```bash
-repo-distiller distill <repo> -o <output> [options]
+repo-distiller <repo> -o <output> [options]
 ```
 
 ### Arguments
@@ -23,7 +29,8 @@ repo-distiller distill <repo> -o <output> [options]
 | `repo` | Path to the repository root |
 | `-o`, `--output` | Output file path, or `-` for stdout |
 | `-i`, `--include` | Path to an include config YAML (optional) |
-| `-e`, `--exclude` | Path to an exclude config YAML (optional) |
+| `-e`, `--exclude` | Paths to exclude, repeatable (e.g. `-e a.txt -e b.txt`) |
+| `--exclude-file` | Path to an exclude config YAML (optional) |
 | `--no-default-excludes` | Disable built-in exclusion rules |
 | `--dry-run` / `--list` | List files that would be included without writing output |
 | `-v`, `--verbose` | Show progress information on stderr |
@@ -31,7 +38,7 @@ repo-distiller distill <repo> -o <output> [options]
 ### Basic example
 
 ```bash
-repo-distiller distill ./my-project -o context.txt
+repo-distiller ./my-project -o context.txt
 ```
 
 This writes a directory tree followed by the contents of every file, respecting `.gitignore` (including nested `.gitignore` files) and skipping common noise (lock files, `__pycache__`, `.venv`, `node_modules`, etc.).
@@ -39,13 +46,13 @@ This writes a directory tree followed by the contents of every file, respecting 
 ### Write to stdout
 
 ```bash
-repo-distiller distill ./my-project -o - | pbcopy
+repo-distiller ./my-project -o - | pbcopy
 ```
 
 ### Preview files without writing
 
 ```bash
-repo-distiller distill ./my-project --dry-run
+repo-distiller ./my-project --dry-run
 ```
 
 ### Output format
@@ -84,12 +91,20 @@ limits:
 ```
 
 ```bash
-repo-distiller distill ./my-project -o context.txt -i include.yaml
+repo-distiller ./my-project -o context.txt -i include.yaml
 ```
 
-### Exclude config
+### Exclude specific paths
 
-Suppress additional paths or extensions beyond the defaults:
+Exclude individual files or directories directly from the command line:
+
+```bash
+repo-distiller ./my-project -o context.txt -e tests/ -e docs/legacy/
+```
+
+### Exclude config file
+
+For more complex exclusion rules, use a YAML config file via `--exclude-file`:
 
 ```yaml
 # exclude.yaml
@@ -102,15 +117,21 @@ extensions:
 ```
 
 ```bash
-repo-distiller distill ./my-project -o context.txt -e exclude.yaml
+repo-distiller ./my-project -o context.txt --exclude-file exclude.yaml
 ```
 
-> When `-e` is provided, `.gitignore` is **not** loaded automatically — the exclude config takes full control.
+> When `--exclude-file` is provided, `.gitignore` is **not** loaded automatically — the exclude config takes full control.
 
-### Combining both
+Both flags can be combined — `-e` paths are merged with the YAML config:
 
 ```bash
-repo-distiller distill ./my-project -o context.txt -i include.yaml -e exclude.yaml
+repo-distiller ./my-project -o context.txt --exclude-file exclude.yaml -e extra_dir/
+```
+
+### Combining include and exclude
+
+```bash
+repo-distiller ./my-project -o context.txt -i include.yaml -e tests/ -e docs/
 ```
 
 ## Default exclusions

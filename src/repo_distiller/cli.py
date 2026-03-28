@@ -24,20 +24,31 @@ def _log(message: str, verbose: bool) -> None:
 @app.command("distill")
 def distill(
     repo: Path = typer.Argument(..., exists=True, file_okay=False),
-    output: str = typer.Option(None, "-o", "--output",
-                               help="Output file path, or '-' for stdout."),
+    output: str = typer.Option(
+        None, "-o", "--output", help="Output file path, or '-' for stdout."
+    ),
     include: Path | None = typer.Option(None, "-i", "--include"),
-    exclude: Path | None = typer.Option(None, "-e", "--exclude"),
+    exclude: list[str] | None = typer.Option(
+        None, "-e", "--exclude", help="Paths to exclude (repeatable)."
+    ),
+    exclude_file: Path | None = typer.Option(
+        None, "--exclude-file", help="YAML file with exclude rules."
+    ),
     no_default_excludes: bool = typer.Option(
-        False, "--no-default-excludes",
+        False,
+        "--no-default-excludes",
         help="Disable built-in exclusion rules for common dirs and files.",
     ),
     dry_run: bool = typer.Option(
-        False, "--dry-run", "--list",
+        False,
+        "--dry-run",
+        "--list",
         help="List files that would be included without writing output.",
     ),
     verbose: bool = typer.Option(
-        False, "-v", "--verbose",
+        False,
+        "-v",
+        "--verbose",
         help="Show progress information on stderr.",
     ),
 ):
@@ -50,7 +61,8 @@ def distill(
         repo: Path to the repository root directory.
         output: Output file path, or '-' to write to stdout.
         include: Optional path to a YAML file specifying include filters.
-        exclude: Optional path to a YAML file specifying exclude filters.
+        exclude: Paths to exclude (repeatable via multiple -e flags).
+        exclude_file: Optional path to a YAML file specifying exclude filters.
             When provided, .gitignore patterns are not loaded.
         no_default_excludes: If True, disable built-in exclusion rules.
         dry_run: If True, list matching files and exit without writing output.
@@ -59,10 +71,12 @@ def distill(
     repo = repo.resolve()
 
     include_cfg = load_include_config(include)
-    exclude_cfg = load_exclude_config(exclude)
+    exclude_cfg = load_exclude_config(exclude_file)
+    if exclude:
+        exclude_cfg.paths.extend(exclude)
     if no_default_excludes:
         exclude_cfg.use_default_excludes = False
-    gitignore = None if exclude else load_gitignore(repo)
+    gitignore = None if exclude_file else load_gitignore(repo)
 
     _log(f"Scanning {repo} ...", verbose)
     files = collect_files(repo, include_cfg, exclude_cfg, gitignore)

@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.0
+
+- Change `-e` / `--exclude` to accept individual paths (repeatable), e.g. `-e a.txt -e b.txt`
+- Move YAML exclude config file to `--exclude-file` flag
+
 ## 0.3.0
 
 - Use typed dataclasses (`IncludeConfig`, `ExcludeConfig`) instead of raw dicts for configuration
