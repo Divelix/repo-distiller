@@ -1,13 +1,35 @@
 import sys
+from importlib.metadata import version
+from pathlib import Path
 
 import typer
-from pathlib import Path
 
 from .config import load_include_config, load_exclude_config, load_gitignore
 from .core import build_tree, collect_files
-from .formatter import write_output
+from .formatter import print_repo_stats, write_output
+
+
+def _version_callback(value: bool) -> None:
+    if value:
+        typer.echo(f"repo-distiller {version('repo-distiller')}")
+        raise typer.Exit()
+
 
 app = typer.Typer(help="Distill a repository into a single prompt-friendly file")
+
+
+@app.callback()
+def main(
+    version: bool = typer.Option(
+        False,
+        "--version",
+        "-V",
+        help="Show version and exit.",
+        callback=_version_callback,
+        is_eager=True,
+    ),
+) -> None:
+    pass
 
 
 def _log(message: str, verbose: bool) -> None:
@@ -103,3 +125,34 @@ def distill(
         with open(output_path, "w", encoding="utf-8") as out:
             write_output(out, tree, files, repo)
         typer.echo(f"Prompt written to {output_path}")
+
+
+@app.command("info")
+def info(
+    repo: Path = typer.Argument(..., exists=True, file_okay=False),
+    include: Path | None = typer.Option(None, "-i", "--include"),
+    exclude: list[str] | None = typer.Option(
+        None, "-e", "--exclude", help="Paths to exclude (repeatable)."
+    ),
+    exclude_file: Path | None = typer.Option(
+        None, "--exclude-file", help="YAML file with exclude rules."
+    ),
+    no_default_excludes: bool = typer.Option(
+        False,
+        "--no-default-excludes",
+        help="Disable built-in exclusion rules for common dirs and files.",
+    ),
+):
+    """Show repository statistics: file and line counts by extension."""
+    repo = repo.resolve()
+
+    include_cfg = load_include_config(include)
+    exclude_cfg = load_exclude_config(exclude_file)
+    if exclude:
+        exclude_cfg.paths.extend(exclude)
+    if no_default_excludes:
+        exclude_cfg.use_default_excludes = False
+    gitignore = None if exclude_file else load_gitignore(repo)
+
+    files = collect_files(repo, include_cfg, exclude_cfg, gitignore)
+    print_repo_stats(files, repo.name)

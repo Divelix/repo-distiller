@@ -2,6 +2,7 @@
 
 ## 0.4.0
 
+- Add `info` command to show repo statistics
 - Change `-e` / `--exclude` to accept individual paths (repeatable), e.g. `-e a.txt -e b.txt`
 - Move YAML exclude config file to `--exclude-file` flag
 
